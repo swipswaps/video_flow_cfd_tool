@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import { MAX_CLIP_DURATION_S } from '../constants';
 

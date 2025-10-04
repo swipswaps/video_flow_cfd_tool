@@ -1,4 +1,3 @@
-
 import React, { useRef, useEffect } from 'react';
 import type { Vector } from '../types';
 import { GRID_WIDTH } from '../constants';
@@ -74,6 +73,19 @@ const drawLegend = (ctx: CanvasRenderingContext2D, canvasWidth: number, canvasHe
     ctx.fillText('High', barX + barWidth, barY + barHeight + 15);
 };
 
+/**
+ * Calculates the color for a vector based on its normalized magnitude.
+ * The color ranges from blue (low magnitude) to red (high magnitude), matching the legend.
+ * @param normalizedMagnitude A value from 0 to 1.
+ * @returns An HSLA color string.
+ */
+const getColorForMagnitude = (normalizedMagnitude: number): string => {
+    // Hue ranges from 240 (blue) down to 0 (red)
+    const hue = 240 - normalizedMagnitude * 240;
+    return `hsla(${hue}, 100%, 70%, 0.9)`;
+};
+
+
 export const VectorFieldDisplay: React.FC<VectorFieldDisplayProps> = ({ vectorField, backgroundImage, density, scale }) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -129,13 +141,14 @@ export const VectorFieldDisplay: React.FC<VectorFieldDisplayProps> = ({ vectorFi
                         const centerX = x * cellWidth + cellWidth / 2;
                         const centerY = y * cellHeight + cellHeight / 2;
 
+                        const normalizedMagnitude = magnitude / maxMagnitude;
+                        const color = getColorForMagnitude(normalizedMagnitude);
                         const angle = Math.atan2(vec.v, vec.u);
-                        const length = (magnitude / maxMagnitude) * arrowScale;
+                        const length = normalizedMagnitude * arrowScale;
 
-                        const hue = 240 - (magnitude / maxMagnitude) * 240; 
-                        ctx.strokeStyle = `hsla(${hue}, 100%, 70%, 0.9)`;
-                        ctx.fillStyle = `hsla(${hue}, 100%, 70%, 0.9)`;
-                        ctx.lineWidth = Math.max(1, (magnitude/maxMagnitude) * 3);
+                        ctx.strokeStyle = color;
+                        ctx.fillStyle = color;
+                        ctx.lineWidth = Math.max(1, normalizedMagnitude * 3);
 
                         ctx.save();
                         ctx.translate(centerX, centerY);
