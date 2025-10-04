@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import type { Vector, OpenFoamFileSet } from '../types';
 import { VectorFieldDisplay } from './VectorFieldDisplay';
@@ -15,6 +14,7 @@ interface ResultsDisplayProps {
 }
 
 type Tab = keyof OpenFoamFileSet | 'Visualization';
+type DisplayMode = 'Vectors' | 'Streamlines' | 'Heatmap';
 
 export const ResultsDisplay: React.FC<ResultsDisplayProps> = ({ 
     vectorField, 
@@ -27,6 +27,7 @@ export const ResultsDisplay: React.FC<ResultsDisplayProps> = ({
 }) => {
     const [activeTab, setActiveTab] = useState<Tab>('Visualization');
     const [copiedFile, setCopiedFile] = useState<string | null>(null);
+    const [displayMode, setDisplayMode] = useState<DisplayMode>('Vectors');
 
     const tabs: { id: Tab; label: string }[] = [
         { id: 'Visualization', label: 'Flow Visualization' },
@@ -47,37 +48,61 @@ export const ResultsDisplay: React.FC<ResultsDisplayProps> = ({
         if (activeTab === 'Visualization') {
             return (
                 <div>
-                    <div className="bg-gray-900/70 p-4 rounded-t-lg flex flex-col sm:flex-row gap-4 sm:items-center border-b border-gray-700">
-                        <div className="flex-1">
-                            <label htmlFor="density-slider" className="block text-sm font-medium text-gray-300 mb-1">
-                                Vector Density ({vectorDensity})
-                            </label>
-                            <input
-                                id="density-slider"
-                                type="range"
-                                min="4"
-                                max={GRID_WIDTH}
-                                value={vectorDensity}
-                                onChange={(e) => setVectorDensity(parseInt(e.target.value, 10))}
-                                className="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer accent-cyan-500"
-                                aria-label="Vector Density"
-                            />
+                    <div className="bg-gray-900/70 p-4 rounded-t-lg flex flex-col md:flex-row gap-4 md:items-center border-b border-gray-700">
+                        {/* Display Mode Toggle */}
+                        <div className="flex-shrink-0">
+                            <span className="block text-sm font-medium text-gray-300 mb-2 md:mb-1">Display Mode</span>
+                            <div className="flex items-center bg-gray-800 border border-gray-700 rounded-lg p-1 space-x-1">
+                                {(['Vectors', 'Streamlines', 'Heatmap'] as DisplayMode[]).map(mode => (
+                                    <button 
+                                        key={mode}
+                                        onClick={() => setDisplayMode(mode)}
+                                        className={`px-3 py-1 text-sm font-medium rounded-md transition-colors w-full md:w-auto ${
+                                            displayMode === mode ? 'bg-cyan-600 text-white shadow-md' : 'text-gray-300 hover:bg-gray-700'
+                                        }`}
+                                    >
+                                        {mode}
+                                    </button>
+                                ))}
+                            </div>
                         </div>
-                        <div className="flex-1">
-                            <label htmlFor="scale-slider" className="block text-sm font-medium text-gray-300 mb-1">
-                                Arrow Scale ({arrowScale.toFixed(1)}x)
-                            </label>
-                            <input
-                                id="scale-slider"
-                                type="range"
-                                min="0.2"
-                                max="3"
-                                step="0.1"
-                                value={arrowScale}
-                                onChange={(e) => setArrowScale(parseFloat(e.target.value))}
-                                className="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer accent-blue-500"
-                                aria-label="Arrow Scale"
-                            />
+                         {/* Sliders */}
+                        <div className="flex-grow grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
+                            {displayMode !== 'Heatmap' && (
+                                <div className="min-w-[120px]">
+                                    <label htmlFor="density-slider" className="block text-sm font-medium text-gray-300 mb-1">
+                                        {displayMode === 'Vectors' ? 'Vector Density' : 'Streamline Density'} ({vectorDensity})
+                                    </label>
+                                    <input
+                                        id="density-slider"
+                                        type="range"
+                                        min="4"
+                                        max={GRID_WIDTH}
+                                        value={vectorDensity}
+                                        onChange={(e) => setVectorDensity(parseInt(e.target.value, 10))}
+                                        className="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer accent-cyan-500"
+                                        aria-label="Density"
+                                    />
+                                </div>
+                            )}
+                            {displayMode === 'Vectors' && (
+                                <div className="min-w-[120px]">
+                                    <label htmlFor="scale-slider" className="block text-sm font-medium text-gray-300 mb-1">
+                                        Arrow Scale ({arrowScale.toFixed(1)}x)
+                                    </label>
+                                    <input
+                                        id="scale-slider"
+                                        type="range"
+                                        min="0.2"
+                                        max="3"
+                                        step="0.1"
+                                        value={arrowScale}
+                                        onChange={(e) => setArrowScale(parseFloat(e.target.value))}
+                                        className="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                                        aria-label="Arrow Scale"
+                                    />
+                                </div>
+                            )}
                         </div>
                     </div>
                     <VectorFieldDisplay 
@@ -85,6 +110,7 @@ export const ResultsDisplay: React.FC<ResultsDisplayProps> = ({
                         backgroundImage={previewFrame}
                         density={vectorDensity}
                         scale={arrowScale}
+                        displayMode={displayMode.toLowerCase() as 'vectors' | 'streamlines' | 'heatmap'}
                      />
                 </div>
             );
