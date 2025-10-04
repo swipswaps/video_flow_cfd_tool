@@ -2,16 +2,29 @@
 import React, { useState } from 'react';
 import type { Vector, OpenFoamFileSet } from '../types';
 import { VectorFieldDisplay } from './VectorFieldDisplay';
+import { GRID_WIDTH } from '../constants';
 
 interface ResultsDisplayProps {
     vectorField: Vector[][];
     openFoamFiles: OpenFoamFileSet;
     previewFrame: string;
+    vectorDensity: number;
+    setVectorDensity: (value: number) => void;
+    arrowScale: number;
+    setArrowScale: (value: number) => void;
 }
 
 type Tab = keyof OpenFoamFileSet | 'Visualization';
 
-export const ResultsDisplay: React.FC<ResultsDisplayProps> = ({ vectorField, openFoamFiles, previewFrame }) => {
+export const ResultsDisplay: React.FC<ResultsDisplayProps> = ({ 
+    vectorField, 
+    openFoamFiles, 
+    previewFrame,
+    vectorDensity,
+    setVectorDensity,
+    arrowScale,
+    setArrowScale
+}) => {
     const [activeTab, setActiveTab] = useState<Tab>('Visualization');
     const [copiedFile, setCopiedFile] = useState<string | null>(null);
 
@@ -32,7 +45,49 @@ export const ResultsDisplay: React.FC<ResultsDisplayProps> = ({ vectorField, ope
 
     const renderContent = () => {
         if (activeTab === 'Visualization') {
-            return <VectorFieldDisplay vectorField={vectorField} backgroundImage={previewFrame} />;
+            return (
+                <div>
+                    <div className="bg-gray-900/70 p-4 rounded-t-lg flex flex-col sm:flex-row gap-4 sm:items-center border-b border-gray-700">
+                        <div className="flex-1">
+                            <label htmlFor="density-slider" className="block text-sm font-medium text-gray-300 mb-1">
+                                Vector Density ({vectorDensity})
+                            </label>
+                            <input
+                                id="density-slider"
+                                type="range"
+                                min="4"
+                                max={GRID_WIDTH}
+                                value={vectorDensity}
+                                onChange={(e) => setVectorDensity(parseInt(e.target.value, 10))}
+                                className="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer accent-cyan-500"
+                                aria-label="Vector Density"
+                            />
+                        </div>
+                        <div className="flex-1">
+                            <label htmlFor="scale-slider" className="block text-sm font-medium text-gray-300 mb-1">
+                                Arrow Scale ({arrowScale.toFixed(1)}x)
+                            </label>
+                            <input
+                                id="scale-slider"
+                                type="range"
+                                min="0.2"
+                                max="3"
+                                step="0.1"
+                                value={arrowScale}
+                                onChange={(e) => setArrowScale(parseFloat(e.target.value))}
+                                className="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                                aria-label="Arrow Scale"
+                            />
+                        </div>
+                    </div>
+                    <VectorFieldDisplay 
+                        vectorField={vectorField} 
+                        backgroundImage={previewFrame}
+                        density={vectorDensity}
+                        scale={arrowScale}
+                     />
+                </div>
+            );
         }
         
         const fileContent = openFoamFiles[activeTab as keyof OpenFoamFileSet];

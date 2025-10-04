@@ -5,7 +5,7 @@ import { VideoTrimmer } from './components/VideoTrimmer';
 import { ResultsDisplay } from './components/ResultsDisplay';
 import { calculateFlowAndGenerateFiles } from './services/cfdCalculator';
 import type { Vector, OpenFoamFileSet } from './types';
-import { MAX_CLIP_DURATION_S } from './constants';
+import { MAX_CLIP_DURATION_S, GRID_WIDTH } from './constants';
 
 // Define assets as SVG components
 const IconCFD = () => (
@@ -21,6 +21,10 @@ const App: React.FC = () => {
     const [statusMessage, setStatusMessage] = useState<string>('');
     const [results, setResults] = useState<{ vectorField: Vector[][]; openFoamFiles: OpenFoamFileSet; previewFrame: string; } | null>(null);
     const [error, setError] = useState<string | null>(null);
+
+    // State for visualization controls
+    const [vectorDensity, setVectorDensity] = useState<number>(GRID_WIDTH / 2);
+    const [arrowScale, setArrowScale] = useState<number>(1.0);
 
     const handleVideoLoad = (src: string) => {
         setVideoSrc(src);
@@ -123,6 +127,10 @@ const App: React.FC = () => {
                             vectorField={results.vectorField}
                             openFoamFiles={results.openFoamFiles}
                             previewFrame={results.previewFrame}
+                            vectorDensity={vectorDensity}
+                            setVectorDensity={setVectorDensity}
+                            arrowScale={arrowScale}
+                            setArrowScale={setArrowScale}
                         />
                     </div>
                 )}
