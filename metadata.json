@@ -1,0 +1,5 @@
+{
+  "name": "CFD Flow Visualizer",
+  "description": "An OpenCV-inspired computational fluid dynamics tool. Load a video, trim a short clip, and use AI to analyze the fluid motion, visualize the velocity field, and generate initial condition files compatible with the OpenFOAM CFD software package.",
+  "requestFramePermissions": []
+}
