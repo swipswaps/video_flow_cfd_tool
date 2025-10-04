@@ -54,9 +54,17 @@ export const VideoTrimmer: React.FC<VideoTrimmerProps> = ({ src, onCalculate, is
             const videoDuration = video.duration;
             setDuration(videoDuration);
             const initialEndTime = Math.min(videoDuration, MAX_CLIP_DURATION_S);
+            setStartTime(0);
             setEndTime(initialEndTime);
+            setCurrentTime(0);
         };
         const handleTimeUpdate = () => setCurrentTime(video.currentTime);
+        
+        // Reset state when src changes to prevent stale UI
+        setStartTime(0);
+        setEndTime(0);
+        setCurrentTime(0);
+        setIsPlaying(false);
 
         video.addEventListener('loadedmetadata', handleLoadedMetadata);
         video.addEventListener('timeupdate', handleTimeUpdate);
@@ -70,6 +78,10 @@ export const VideoTrimmer: React.FC<VideoTrimmerProps> = ({ src, onCalculate, is
         const newStart = parseFloat(e.target.value);
         if (newStart < endTime) {
             setStartTime(newStart);
+            // If the new clip is too long, adjust the end time.
+            if (endTime - newStart > MAX_CLIP_DURATION_S) {
+                setEndTime(Math.min(duration, newStart + MAX_CLIP_DURATION_S));
+            }
         }
     };
     
@@ -77,6 +89,10 @@ export const VideoTrimmer: React.FC<VideoTrimmerProps> = ({ src, onCalculate, is
         const newEnd = parseFloat(e.target.value);
         if (newEnd > startTime) {
             setEndTime(newEnd);
+            // If the new clip is too long, adjust the start time.
+            if (newEnd - startTime > MAX_CLIP_DURATION_S) {
+                setStartTime(Math.max(0, newEnd - MAX_CLIP_DURATION_S));
+            }
         }
     };
 
@@ -115,10 +131,10 @@ export const VideoTrimmer: React.FC<VideoTrimmerProps> = ({ src, onCalculate, is
                         <input
                             type="range" min="0" max={duration} value={currentTime} readOnly
                             className="absolute w-full h-1.5 bg-gray-600 rounded-lg appearance-none pointer-events-none z-10"
-                            style={{ background: `linear-gradient(to right, #2dd4bf ${currentTime / duration * 100}%, #4a5568 ${currentTime / duration * 100}%)` }}
+                            style={{ background: `linear-gradient(to right, #2dd4bf ${duration > 0 ? (currentTime / duration * 100) : 0}%, #4a5568 ${duration > 0 ? (currentTime / duration * 100) : 0}%)` }}
                         />
                         <div className="absolute w-full h-1.5 bg-transparent z-20" style={{ left: 0 }}>
-                            <div className="absolute h-full bg-blue-500/50" style={{ left: `${(startTime / duration) * 100}%`, width: `${(clipDuration / duration) * 100}%` }}></div>
+                            <div className="absolute h-full bg-blue-500/50" style={{ left: `${duration > 0 ? (startTime / duration) * 100 : 0}%`, width: `${duration > 0 ? (clipDuration / duration) * 100 : 0}%` }}></div>
                         </div>
                     </div>
                      <div className="text-sm font-mono whitespace-nowrap text-gray-300">
