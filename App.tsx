@@ -1,11 +1,10 @@
-
 import React, { useState, useCallback, useMemo } from 'react';
 import { VideoLoader } from './components/VideoLoader';
 import { VideoTrimmer } from './components/VideoTrimmer';
 import { ResultsDisplay } from './components/ResultsDisplay';
 import { calculateFlowAndGenerateFiles } from './services/cfdCalculator';
 import type { Vector, OpenFoamFileSet } from './types';
-import { MAX_CLIP_DURATION_S, GRID_WIDTH } from './constants';
+import { MAX_CLIP_DURATION_S, DEFAULT_GRID_WIDTH, DEFAULT_GRID_HEIGHT } from './constants';
 
 // Define assets as SVG components
 const IconCFD = () => (
@@ -15,6 +14,8 @@ const IconCFD = () => (
     </svg>
 );
 
+type ROI = { x: number; y: number; width: number; height: number; };
+
 const App: React.FC = () => {
     const [videoSrc, setVideoSrc] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -22,14 +23,19 @@ const App: React.FC = () => {
     const [results, setResults] = useState<{ vectorField: Vector[][]; openFoamFiles: OpenFoamFileSet; previewFrame: string; } | null>(null);
     const [error, setError] = useState<string | null>(null);
 
-    // State for visualization controls
-    const [vectorDensity, setVectorDensity] = useState<number>(GRID_WIDTH / 2);
+    // State for visualization and calculation controls
+    const [vectorDensity, setVectorDensity] = useState<number>(DEFAULT_GRID_WIDTH / 2);
     const [arrowScale, setArrowScale] = useState<number>(1.0);
+    const [roi, setRoi] = useState<ROI | null>(null);
+    const [gridWidth, setGridWidth] = useState<number>(DEFAULT_GRID_WIDTH);
+    const [gridHeight, setGridHeight] = useState<number>(DEFAULT_GRID_HEIGHT);
+
 
     const handleVideoLoad = (src: string) => {
         setVideoSrc(src);
         setResults(null);
         setError(null);
+        setRoi(null); // Reset ROI when new video is loaded
     };
 
     const handleCalculation = useCallback(async (videoElement: HTMLVideoElement, startTime: number, endTime: number) => {
@@ -47,6 +53,9 @@ const App: React.FC = () => {
                 videoElement,
                 startTime,
                 endTime,
+                roi,
+                gridWidth,
+                gridHeight,
                 (message: string) => setStatusMessage(message)
             );
             setResults(calculatedResults);
@@ -57,7 +66,7 @@ const App: React.FC = () => {
             setIsLoading(false);
             setStatusMessage('');
         }
-    }, []);
+    }, [roi, gridWidth, gridHeight]);
 
     const StatusIndicator: React.FC = useMemo(() => () => {
         if (!isLoading && !error && !results) return null;
@@ -114,6 +123,12 @@ const App: React.FC = () => {
                                 src={videoSrc}
                                 onCalculate={handleCalculation}
                                 isCalculating={isLoading}
+                                roi={roi}
+                                setRoi={setRoi}
+                                gridWidth={gridWidth}
+                                setGridWidth={setGridWidth}
+                                gridHeight={gridHeight}
+                                setGridHeight={setGridHeight}
                             />
                         </div>
                     )}
@@ -131,6 +146,8 @@ const App: React.FC = () => {
                             setVectorDensity={setVectorDensity}
                             arrowScale={arrowScale}
                             setArrowScale={setArrowScale}
+                            roi={roi}
+                            gridWidth={gridWidth}
                         />
                     </div>
                 )}

@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import type { Vector, OpenFoamFileSet } from '../types';
 import { VectorFieldDisplay } from './VectorFieldDisplay';
-import { GRID_WIDTH } from '../constants';
+
+type ROI = { x: number; y: number; width: number; height: number; };
 
 interface ResultsDisplayProps {
     vectorField: Vector[][];
@@ -11,6 +12,8 @@ interface ResultsDisplayProps {
     setVectorDensity: (value: number) => void;
     arrowScale: number;
     setArrowScale: (value: number) => void;
+    roi: ROI | null;
+    gridWidth: number;
 }
 
 type Tab = keyof OpenFoamFileSet | 'Visualization';
@@ -23,7 +26,9 @@ export const ResultsDisplay: React.FC<ResultsDisplayProps> = ({
     vectorDensity,
     setVectorDensity,
     arrowScale,
-    setArrowScale
+    setArrowScale,
+    roi,
+    gridWidth
 }) => {
     const [activeTab, setActiveTab] = useState<Tab>('Visualization');
     const [copiedFile, setCopiedFile] = useState<string | null>(null);
@@ -77,7 +82,7 @@ export const ResultsDisplay: React.FC<ResultsDisplayProps> = ({
                                         id="density-slider"
                                         type="range"
                                         min="4"
-                                        max={GRID_WIDTH}
+                                        max={gridWidth}
                                         value={vectorDensity}
                                         onChange={(e) => setVectorDensity(parseInt(e.target.value, 10))}
                                         className="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer accent-cyan-500"
@@ -111,6 +116,7 @@ export const ResultsDisplay: React.FC<ResultsDisplayProps> = ({
                         density={vectorDensity}
                         scale={arrowScale}
                         displayMode={displayMode.toLowerCase() as 'vectors' | 'streamlines' | 'heatmap'}
+                        roi={roi}
                      />
                 </div>
             );

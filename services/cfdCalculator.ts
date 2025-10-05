@@ -1,17 +1,18 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
 import type { Vector, OpenFoamFileSet } from '../types';
-import { GRID_WIDTH, GRID_HEIGHT, GEMINI_MODEL } from '../constants';
+import { GEMINI_MODEL } from '../constants';
 
+type ROI = { x: number; y: number; width: number; height: number; };
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
 
 /**
- * Extracts frames from a video clip as base64 strings.
+ * Extracts frames from a video clip, cropping to an ROI if provided.
  */
 async function extractFrames(
     videoElement: HTMLVideoElement,
     startTime: number,
     endTime: number,
+    roi: ROI | null,
     updateStatus: (message: string) => void
 ): Promise<string[]> {
     updateStatus('Extracting frames from video...');
@@ -29,11 +30,19 @@ async function extractFrames(
                 resolve(frames);
                 return;
             }
+            
+            // Determine source and destination dimensions for cropping
+            const sx = roi ? roi.x * videoElement.videoWidth : 0;
+            const sy = roi ? roi.y * videoElement.videoHeight : 0;
+            const sWidth = roi ? roi.width * videoElement.videoWidth : videoElement.videoWidth;
+            const sHeight = roi ? roi.height * videoElement.videoHeight : videoElement.videoHeight;
+            
+            // Output cropped frames at a consistent size
+            canvas.width = sWidth;
+            canvas.height = sHeight;
 
-            canvas.width = videoElement.videoWidth;
-            canvas.height = videoElement.videoHeight;
-            ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
-            // Get base64 string, remove data URL prefix
+            ctx.drawImage(videoElement, sx, sy, sWidth, sHeight, 0, 0, canvas.width, canvas.height);
+            
             const frameData = canvas.toDataURL('image/jpeg', 0.8).split(',')[1];
             frames.push(frameData);
             
@@ -44,24 +53,27 @@ async function extractFrames(
         };
 
         videoElement.addEventListener('seeked', onSeeked);
-        
-        // Kick off the process
         videoElement.currentTime = startTime;
     });
 }
 
 /**
- * Calls Gemini API to calculate the optical flow between two frames.
+ * Calls Gemini API to calculate the optical flow between two frames for a dynamic grid.
  */
-async function calculateVectorField(frame1_base64: string, frame2_base64: string): Promise<Vector[][]> {
-    const prompt = `You are an expert in fluid dynamics and computer vision. Your task is to perform an optical flow analysis on the two provided, consecutive video frames to estimate the 2D velocity field of the fluid. Analyze the motion from the first image to the second. Provide the output as a velocity vector field on a ${GRID_WIDTH}x${GRID_HEIGHT} grid. The final output must be a single JSON object matching the provided schema. The 'vectors' array should contain exactly ${GRID_WIDTH * GRID_HEIGHT} elements in row-major order, representing the grid from top-left to bottom-right.`;
+async function calculateVectorField(
+    frame1_base64: string, 
+    frame2_base64: string, 
+    gridWidth: number, 
+    gridHeight: number
+): Promise<Vector[][]> {
+    const prompt = `You are an expert in fluid dynamics and computer vision. Your task is to perform an optical flow analysis on the two provided, consecutive video frames to estimate the 2D velocity field of the fluid. Analyze the motion from the first image to the second. Provide the output as a velocity vector field on a ${gridWidth}x${gridHeight} grid. The final output must be a single JSON object matching the provided schema. The 'vectors' array should contain exactly ${gridWidth * gridHeight} elements in row-major order, representing the grid from top-left to bottom-right.`;
     
     const responseSchema = {
         type: Type.OBJECT,
         properties: {
             vectors: {
                 type: Type.ARRAY,
-                description: `An array of exactly ${GRID_WIDTH * GRID_HEIGHT} velocity vectors.`,
+                description: `An array of exactly ${gridWidth * gridHeight} velocity vectors.`,
                 items: {
                     type: Type.OBJECT,
                     properties: {
@@ -94,21 +106,21 @@ async function calculateVectorField(frame1_base64: string, frame2_base64: string
     const result = JSON.parse(jsonText);
     const flatVectors: Vector[] = result.vectors;
 
-    if (flatVectors.length !== GRID_WIDTH * GRID_HEIGHT) {
-        throw new Error(`AI returned an incorrect number of vectors. Expected ${GRID_WIDTH * GRID_HEIGHT}, got ${flatVectors.length}.`);
+    if (flatVectors.length !== gridWidth * gridHeight) {
+        throw new Error(`AI returned an incorrect number of vectors. Expected ${gridWidth * gridHeight}, got ${flatVectors.length}.`);
     }
     
     const grid: Vector[][] = [];
-    for (let i = 0; i < GRID_HEIGHT; i++) {
-        grid.push(flatVectors.slice(i * GRID_WIDTH, (i + 1) * GRID_WIDTH));
+    for (let i = 0; i < gridHeight; i++) {
+        grid.push(flatVectors.slice(i * gridWidth, (i + 1) * gridWidth));
     }
     return grid;
 }
 
 /**
- * Generates OpenFOAM compatible file contents.
+ * Generates OpenFOAM compatible file contents for a dynamic grid.
  */
-function generateOpenFoamFiles(vectorField: Vector[][], duration: number): OpenFoamFileSet {
+function generateOpenFoamFiles(vectorField: Vector[][], duration: number, gridWidth: number, gridHeight: number): OpenFoamFileSet {
     const header = `/*--------------------------------*- C++ -*----------------------------------*\\
 | =========                 |                                                 |
 | \\\\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
@@ -117,12 +129,11 @@ function generateOpenFoamFiles(vectorField: Vector[][], duration: number): OpenF
 |    \\\\/     M anipulation  |                                                 |
 \\*---------------------------------------------------------------------------*/`;
 
-    const numPoints = GRID_WIDTH * GRID_HEIGHT;
+    const numPoints = gridWidth * gridHeight;
     let vectorList = '';
-    for (let y = 0; y < GRID_HEIGHT; y++) {
-        for (let x = 0; x < GRID_WIDTH; x++) {
+    for (let y = 0; y < gridHeight; y++) {
+        for (let x = 0; x < gridWidth; x++) {
             const vec = vectorField[y][x];
-            // OpenFOAM is 3D, so we add a 0 for the z-component
             vectorList += `(${vec.u.toFixed(6)} ${vec.v.toFixed(6)} 0)\n`;
         }
     }
@@ -148,148 +159,46 @@ ${vectorList}
 
 boundaryField
 {
-    walls
-    {
-        type            zeroGradient;
-    }
-    inlet
-    {
-        type            zeroGradient;
-    }
-    outlet
-    {
-        type            zeroGradient;
-    }
+    walls { type zeroGradient; }
+    inlet { type zeroGradient; }
+    outlet { type zeroGradient; }
 }
 `;
 
     const controlDict = `${header}
-FoamFile
-{
-    version     2.0;
-    format      ascii;
-    class       dictionary;
-    location    "system";
-    object      controlDict;
-}
+FoamFile { version 2.0; format ascii; class dictionary; location "system"; object controlDict; }
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
-
-application     icoFoam;
-startFrom       startTime;
-startTime       0;
-stopAt          endTime;
-endTime         ${duration.toFixed(2)};
-deltaT          0.005;
-writeControl    timeStep;
-writeInterval   20;
-purgeWrite      0;
-writeFormat     ascii;
-writePrecision  6;
-writeCompression off;
-timeFormat      general;
-timePrecision   6;
-runTimeModifiable true;
+application     icoFoam; startTime 0; stopAt endTime; endTime ${duration.toFixed(2)}; deltaT 0.005;
+writeControl timeStep; writeInterval 20; purgeWrite 0; writeFormat ascii; writePrecision 6; writeCompression off;
+timeFormat general; timePrecision 6; runTimeModifiable true;
 `;
 
     const fvSchemes = `${header}
-FoamFile
-{
-    version     2.0;
-    format      ascii;
-    class       dictionary;
-    location    "system";
-    object      fvSchemes;
-}
+FoamFile { version 2.0; format ascii; class dictionary; location "system"; object fvSchemes; }
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
-
-ddtSchemes
-{
-    default         Euler;
-}
-
-gradSchemes
-{
-    default         Gauss linear;
-}
-
-divSchemes
-{
-    default         none;
-    div(phi,U)      Gauss linear;
-}
-
-laplacianSchemes
-{
-    default         Gauss linear orthogonal;
-}
-
-interpolationSchemes
-{
-    default         linear;
-}
-
-snGradSchemes
-{
-    default         orthogonal;
-}
+ddtSchemes { default Euler; }
+gradSchemes { default Gauss linear; }
+divSchemes { default none; div(phi,U) Gauss linear; }
+laplacianSchemes { default Gauss linear orthogonal; }
+interpolationSchemes { default linear; }
+snGradSchemes { default orthogonal; }
 `;
 
     const fvSolution = `${header}
-FoamFile
-{
-    version     2.0;
-    format      ascii;
-    class       dictionary;
-    location    "system";
-    object      fvSolution;
-}
+FoamFile { version 2.0; format ascii; class dictionary; location "system"; object fvSolution; }
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
-
-solvers
-{
-    p
-    {
-        solver          PCG;
-        preconditioner  DIC;
-        tolerance       1e-06;
-        relTol          0.05;
-    }
-
-    U
-    {
-        solver          smoothSolver;
-        smoother        symGaussSeidel;
-        tolerance       1e-05;
-        relTol          0;
-    }
-}
-
-PISO
-{
-    nCorrectors     2;
-    nNonOrthogonalCorrectors 0;
-    pRefCell        0;
-    pRefValue       0;
-}
+solvers { p { solver PCG; preconditioner DIC; tolerance 1e-06; relTol 0.05; } U { solver smoothSolver; smoother symGaussSeidel; tolerance 1e-05; relTol 0; } }
+PISO { nCorrectors 2; nNonOrthogonalCorrectors 0; pRefCell 0; pRefValue 0; }
 `;
 
     const transportProperties = `${header}
-FoamFile
-{
-    version     2.0;
-    format      ascii;
-    class       dictionary;
-    location    "constant";
-    object      transportProperties;
-}
+FoamFile { version 2.0; format ascii; class dictionary; location "constant"; object transportProperties; }
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
-
-nu              [0 2 -1 0 0 0 0] 0.01;
+nu [0 2 -1 0 0 0 0] 0.01;
 `;
 
     return { U, controlDict, fvSchemes, fvSolution, transportProperties };
 }
-
 
 /**
  * Main orchestration function.
@@ -298,9 +207,16 @@ export async function calculateFlowAndGenerateFiles(
     videoElement: HTMLVideoElement,
     startTime: number,
     endTime: number,
+    roi: ROI | null,
+    gridWidth: number,
+    gridHeight: number,
     updateStatus: (message: string) => void
 ): Promise<{ vectorField: Vector[][]; openFoamFiles: OpenFoamFileSet; previewFrame: string; }> {
-    const frames = await extractFrames(videoElement, startTime, endTime, updateStatus);
+    // We need the first frame uncropped for the background preview
+    const previewFrameData = await extractFrames(videoElement, startTime, startTime + 1/30, null, () => {});
+    const previewFrame = `data:image/jpeg;base64,${previewFrameData[0]}`;
+
+    const frames = await extractFrames(videoElement, startTime, endTime, roi, updateStatus);
     
     if (frames.length < 2) {
         throw new Error('Not enough frames extracted to perform analysis. Please select a longer clip.');
@@ -311,16 +227,16 @@ export async function calculateFlowAndGenerateFiles(
     const vectorFields: Vector[][][] = [];
     for (let i = 0; i < frames.length - 1; i++) {
         updateStatus(`Analyzing frame pair ${i + 1}/${frames.length - 1}...`);
-        const vf = await calculateVectorField(frames[i], frames[i + 1]);
+        const vf = await calculateVectorField(frames[i], frames[i + 1], gridWidth, gridHeight);
         vectorFields.push(vf);
     }
 
     updateStatus('Averaging vector fields...');
-    const averagedField: Vector[][] = Array(GRID_HEIGHT).fill(0).map(() => Array(GRID_WIDTH).fill({ u: 0, v: 0 }));
+    const averagedField: Vector[][] = Array(gridHeight).fill(0).map(() => Array(gridWidth).fill({ u: 0, v: 0 }));
 
     for (const field of vectorFields) {
-        for (let y = 0; y < GRID_HEIGHT; y++) {
-            for (let x = 0; x < GRID_WIDTH; x++) {
+        for (let y = 0; y < gridHeight; y++) {
+            for (let x = 0; x < gridWidth; x++) {
                 averagedField[y][x] = {
                     u: averagedField[y][x].u + field[y][x].u,
                     v: averagedField[y][x].v + field[y][x].v,
@@ -329,8 +245,8 @@ export async function calculateFlowAndGenerateFiles(
         }
     }
     
-    for (let y = 0; y < GRID_HEIGHT; y++) {
-        for (let x = 0; x < GRID_WIDTH; x++) {
+    for (let y = 0; y < gridHeight; y++) {
+        for (let x = 0; x < gridWidth; x++) {
             averagedField[y][x] = {
                 u: averagedField[y][x].u / vectorFields.length,
                 v: averagedField[y][x].v / vectorFields.length,
@@ -339,13 +255,13 @@ export async function calculateFlowAndGenerateFiles(
     }
 
     updateStatus('Generating OpenFOAM files...');
-    const openFoamFiles = generateOpenFoamFiles(averagedField, endTime - startTime);
+    const openFoamFiles = generateOpenFoamFiles(averagedField, endTime - startTime, gridWidth, gridHeight);
     
     updateStatus('Finalizing results...');
 
     return {
         vectorField: averagedField,
         openFoamFiles,
-        previewFrame: `data:image/jpeg;base64,${frames[0]}`,
+        previewFrame,
     };
 }
