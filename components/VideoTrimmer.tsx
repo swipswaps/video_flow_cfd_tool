@@ -65,6 +65,12 @@ const ROILayer: React.FC<{ roi: ROI | null, setRoi: (roi: ROI | null) => void }>
     };
     
     const displayRect = isDrawing ? currentRect : roi;
+    
+    const roiBoxClass = `absolute border-2 pointer-events-none ${
+        isDrawing 
+        ? 'border-dashed border-cyan-400 bg-cyan-400/20' 
+        : 'border-solid border-cyan-500 bg-cyan-500/30'
+    }`;
 
     return (
         <div 
@@ -77,7 +83,7 @@ const ROILayer: React.FC<{ roi: ROI | null, setRoi: (roi: ROI | null) => void }>
         >
             {displayRect && (
                 <div 
-                    className="absolute border-2 border-dashed border-cyan-400 bg-cyan-400/20 pointer-events-none"
+                    className={roiBoxClass}
                     style={{
                         left: `${displayRect.x * 100}%`,
                         top: `${displayRect.y * 100}%`,
